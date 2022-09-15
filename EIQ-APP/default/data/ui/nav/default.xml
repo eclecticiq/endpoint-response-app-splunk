@@ -1,0 +1,4 @@
+<nav search_view="search" color="#a65c7d">
+<view name="eclecticiq_endpoint_response" label="EclecticIQ Endpoint Response" default="true" />
+<view name="search" label="Search"/>
+</nav>

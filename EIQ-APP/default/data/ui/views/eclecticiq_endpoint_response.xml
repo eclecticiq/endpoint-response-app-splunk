@@ -1,0 +1,52 @@
+<form>
+  <label>EclecticIQ Endpoint Response</label>
+  <fieldset submitButton="false">
+    <input type="time" token="field1">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="search">
+      <label>Search</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="radio" token="checkbox">
+      <label>Show only those events which has caused alert</label>
+      <choice value="| eval hash=sha512(_raw) | lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash value_eiq confidence_eiq | search event_hash =*">True</choice>
+      <choice value="| eval hash=sha512(_raw)">False</choice>
+      <default>| eval hash=sha512(_raw)</default>
+      <initialValue>| eval hash=sha512(_raw)</initialValue>
+    </input>
+    <input type="dropdown" token="ic_installed" depends="$nevershow$">
+      <label>Is IC installed</label>
+      <fieldForLabel>count</fieldForLabel>
+      <fieldForValue>count</fieldForValue>
+      <selectFirstChoice>true</selectFirstChoice>
+      <search>
+        <query>| rest /services/data/transforms/lookups | table eai:acl.app filename title fields_list id | rename eai:acl.app as App, filename as "Lookup File", title as Title, fields_list as "Fields", id as Endpoint| search App="TA-eclecticiq" Title="eiq_alerts_list" | stats count</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Endpoint response events</title>
+      <table>
+        <search>
+          <query>`eiq_er_index` sourcetype="eclecticiq:er:json"   $checkbox$| rename value_eiq as "Observable Value", confidence_eiq as Maliciousness, @timestamp as Time, @host_identifier as Host, platform as OS | eval _pid=coalesce(process_guid, pid),_eventtime=_time, _event_hash=hash , _raw1=Time.Host.OS.'Observable Value'.Maliciousness._pid._eventtime._event_hash , _raw2=_raw| table Time, Host, OS, "Observable Value", Maliciousness _pid _eventtime _event_hash _raw1 _raw2 | search _raw1="*$search$*" OR _raw2="*$search$*"</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/EIQ-APP/er_drilldown?earliest_tok=$earliest$&amp;latest_tok=$latest$&amp;eid=$row._pid$&amp;event_time=$row._eventtime$&amp;event_hash=$row._event_hash$&amp;ic_installed=$ic_installed$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,180 @@
+<form version="1.1">
+  <label>ER Drilldown</label>
+  <init>
+    <eval token="time_tok.earliest">$event_time$-$time_data$</eval>
+    <eval token="time_tok.latest">$event_time$+$time_data$</eval>
+    <eval token="label_earliest">strftime($time_tok.earliest$,"%Y-%m-%d %H:%M:%S")</eval>
+    <eval token="label_latest">case($time_tok.latest$&lt;now(), strftime($time_tok.latest$,"%Y-%m-%d %H:%M:%S"),1=1,strftime(now(),"%Y-%m-%d %H:%M:%S") )</eval>
+    <eval token="form.ic_installed_dd">case($ic_installed$&gt;0, "true")</eval>
+    <eval token="form.ic_not_installed_dd">case($ic_installed$==0, "true")</eval>
+  </init>
+  <fieldset submitButton="false">
+    <input type="dropdown" token="time_data">
+      <label>Show data of ± Timerange</label>
+      <choice value="600">10 minutes</choice>
+      <choice value="1800">30 minutes</choice>
+      <choice value="3600">1 hour</choice>
+      <choice value="18000">5 hours</choice>
+      <choice value="36000">10 hours</choice>
+      <choice value="86400">1 day</choice>
+      <choice value="432000">5 days</choice>
+      <choice value="864000">10 days</choice>
+      <change>
+        <eval token="time_tok.earliest">$event_time$-$time_data$</eval>
+        <eval token="time_tok.latest">$event_time$+$time_data$</eval>
+        <eval token="label_earliest">strftime($time_tok.earliest$,"%Y-%m-%d %H:%M:%S")</eval>
+        <eval token="label_latest">case($time_tok.latest$&lt;now(), strftime($time_tok.latest$,"%Y-%m-%d %H:%M:%S"),1=1,strftime(now(),"%Y-%m-%d %H:%M:%S") )</eval>
+      </change>
+      <default>1800</default>
+      <initialValue>1800</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel depends="$form.ic_installed_dd$">
+      <title>Events Related to $eid$</title>
+      <table>
+        <search>
+          <query>`eiq_er_index` sourcetype="eclecticiq:er:json" | eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash observable_id value_eiq confidence_eiq sighting | eval sighting=case(isnull(sighting), 0, 1=1, sighting)| table observable_id value_eiq confidence_eiq sighting *  | fields - _raw hash punct linecount eventtype</query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">cell</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="totalsRow">false</option>
+        <format type="color" field="sighting">
+          <colorPalette type="expression">case (value=="0", "#032078",value=="1","#b30000")</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$form.ic_installed_dd$">
+      <title>Events with GUID $eid$  between $label_earliest$ and $label_latest$ for which the alert is not created</title>
+      <chart>
+        <search>
+          <query>`eiq_er_index` sourcetype="eclecticiq:er:json" | eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash observable_id value_eiq confidence_eiq sighting | eval sighting=case(isnull(sighting), 0, 1=1, sighting) | stats count by _time,query_name,sighting | eval {query_name}=count 
+| append 
+    [ search `eiq_er_index`| eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash observable_id value_eiq confidence_eiq sighting | eval sighting=case(isnull(sighting), 0, 1=1, sighting)
+    | stats count by _time,query_name,sighting
+    | eval count= null
+        ] 
+| where sighting=0
+| sort 0 _time,query_name
+| fields - count ,query_name,hash, event_hash, sighting</query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.fieldColors">{"sighting":#b30000, "sighting1":"#032078"}</option>
+        <option name="charting.layout.splitSeries">1</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">1</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisEnd</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$form.ic_installed_dd$">
+      <title>Events with GUID $eid$  between $label_earliest$ and $label_latest$ for which the alert is created</title>
+      <chart>
+        <search>
+          <query>`eiq_er_index`| eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash observable_id value_eiq confidence_eiq sighting | eval sighting=case(isnull(sighting), 0, 1=1, sighting)|eval _time=time | stats count by _time,query_name,hash,sighting | eval {query_name}=count 
+| append 
+    [ search `eiq_er_index`| eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| lookup eiq_alerts_list event_hash as hash OUTPUTNEW event_hash observable_id value_eiq confidence_eiq sighting | eval sighting=case(isnull(sighting), 0, 1=1, sighting)|eval _time=time
+    | stats count by _time,query_name,hash,sighting
+    | eval count= null
+        ] 
+| where sighting!=0
+| sort 0 _time,query_name
+| fields - count ,query_name,hash, event_hash, sighting</query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.fieldColors">{"sighting":#b30000, "sighting1":"#032078"}</option>
+        <option name="charting.layout.splitSeries">1</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">1</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisEnd</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$form.ic_not_installed_dd$">
+      <title>Events Related to $eid$</title>
+      <table>
+        <search>
+          <query>`eiq_er_index` sourcetype="eclecticiq:er:json" | eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| table *  | fields - _raw hash punct linecount eventtype</query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">cell</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="totalsRow">false</option>
+        <format type="color" field="sighting">
+          <colorPalette type="expression">case (value=="0", "#032078",value=="1","#b30000")</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$form.ic_not_installed_dd$">
+      <title>Events with GUID $eid$  between $label_earliest$ and $label_latest$</title>
+      <chart>
+        <search>
+          <query>`eiq_er_index` sourcetype="eclecticiq:er:json" | eval hash=sha512(_raw) |  where pid="$eid$" or process_guid="$eid$" or hash="$event_hash$"
+| stats count  by  query_name _time | eval {query_name}=count | append 
+    [ search `eiq_er_index`| eval hash=sha512(_raw)|  where pid="98" or process_guid="98" or hash="7192bc4e4be1dd8e1e10f8e3b74c938c89aff953d620a067fdb71234344f2b476ce2b228e4a6bf084bcf63bef37c4ece038ec1076ae25611e9e40a63419cded8"
+    | stats count by  query_name _time
+    | eval count= null
+        ]| fields  - time, hash query_name count</query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.fieldColors">{"sighting":#b30000, "sighting1":"#032078"}</option>
+        <option name="charting.layout.splitSeries">1</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">1</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisEnd</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>
